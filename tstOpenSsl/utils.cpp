@@ -76,10 +76,11 @@ char* ReadAllFromTextFile(const char* filePath)
     if(f) {
         fseek(f, 0, SEEK_END);
         size_t size = ftell(f);
-        buffer = (char*)malloc(size);
+        buffer = (char*)malloc(size+1);
         rewind(f);
         fread(buffer, sizeof(char), size, f);
         fclose(f);
+        buffer[size] = '\0';
     }
     return buffer;
 }
