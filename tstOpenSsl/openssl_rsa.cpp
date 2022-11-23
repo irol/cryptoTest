@@ -6,6 +6,7 @@
 
 RSA* CreatePublicKeyFromModulusExponent(const char* modulusHex, const char* exponentHex);
 RSA* CreatePrivateKeyFromPemString(const char* privateKeyStr);
+RSA* CreatePublicKeyFromPemString(const char* publicKeyStr);
 
 int EncryptRsa(const char* modulusHex, const char* exponentHex,
                unsigned char* dataIn, unsigned int dataInLength, unsigned char* dataOut, int& dataOutLength) {
@@ -18,6 +19,18 @@ int EncryptRsa(const char* modulusHex, const char* exponentHex,
     }
     return rc;
 }
+
+int EncryptRsa(const char* publicKeyPem, unsigned char* dataIn, unsigned int dataInLength, unsigned char* dataOut, int& dataOutLength) {
+    int rc = -1;
+    RSA *publicRsaKey = CreatePublicKeyFromPemString(publicKeyPem);
+    if (publicRsaKey) {
+        dataOutLength = RSA_public_encrypt(dataInLength, dataIn, dataOut, publicRsaKey, RSA_PKCS1_PADDING);
+        RSA_free(publicRsaKey);
+        rc = 0;
+    }
+    return rc;
+}
+
 
 int DecryptRsa(const char* privateKeyPem, unsigned char* dataIn, unsigned int dataInLength, unsigned char* dataOut, int& dataOutLength){
     int rc = -1;
@@ -72,6 +85,47 @@ RSA* CreatePrivateKeyFromPemString(const char* privateKeyStr)
     return rsaPrivateKey ;
 }
 
+RSA* CreatePublicKeyFromPemString(const char* publicKeyStr)
+{
+    BIO *bio = BIO_new_mem_buf( (void*)publicKeyStr, -1 );
+    //BIO_set_flags( bio, BIO_FLAGS_BASE64_NO_NL ) ; // NO NL
+    RSA* rsaPublicKey = NULL;
+    auto pKey = PEM_read_bio_RSAPublicKey(bio, &rsaPublicKey, NULL, NULL ) ;
+
+    if (!rsaPublicKey) {
+        printf("ERROR: Could not load PUBLIC KEY!  PEM_read_bio_RSAPublicKey FAILED(1): %s\n",
+               ERR_error_string(ERR_get_error(), NULL));
+
+        if(bio) {
+            BIO_free(bio);
+            bio=NULL;
+        }
+
+        bio = BIO_new(BIO_s_mem());
+        int len = BIO_write(bio, publicKeyStr, strlen(publicKeyStr) + 1);
+
+        EVP_PKEY* evp_key = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
+        if(evp_key) {
+            rsaPublicKey = EVP_PKEY_get1_RSA(evp_key);
+
+            if (!rsaPublicKey) {
+                printf("ERROR: Could not load PUBLIC KEY!  EVP_PKEY_get1_RSA FAILED(2): %s\n",
+                       ERR_error_string(ERR_get_error(), NULL));
+            }
+        }
+        else {
+            printf("ERROR: Could not load PUBLIC KEY!  PEM_read_bio_PUBKEY FAILED(3): %s\n",
+                   ERR_error_string(ERR_get_error(), NULL));
+        }
+    }
+
+    if(bio) {
+        BIO_free(bio);
+        bio=NULL;
+    }
+    return rsaPublicKey ;
+}
+
 RSA* CreatePublicKeyFromModulusExponent(const char* modulusHex, const char* exponentHex)
 {
     bool freeNE = true;
@@ -100,4 +154,16 @@ RSA* CreatePublicKeyFromModulusExponent(const char* modulusHex, const char* expo
         if (e) BN_free(e);
     }
     return publicRsaKey;
+}
+
+int ReadModulusAndExponent(const RSA* publicKey, unsigned char* modulus, int& modulusLength, unsigned char* exponent, int& exponentLength){
+    const BIGNUM *n = NULL;
+    const BIGNUM *e = NULL;
+    const BIGNUM *d = NULL;
+    RSA_get0_key(publicKey, &n, &e, &d);
+
+    modulusLength = BN_bn2bin(n, modulus);
+    exponentLength = BN_bn2bin(e, exponent);
+
+    return exponentLength > 0 && modulusLength > 0 ? 0 : -1;
 }

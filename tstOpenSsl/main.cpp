@@ -1,17 +1,21 @@
 #include <iostream>
 #include <cstring>
 #include <openssl/aes.h>
+#include <openssl/rsa.h>
 
 extern int GenerateRandom(unsigned char* buf, int bufSize);
 extern std::ostream& PrintBuf(const char* bufName, unsigned char* buf, long bufLen, std::ostream& o);
 extern int encrypt_AES256ECB(unsigned char *key, unsigned char *plain, int plainLength,  unsigned char *cipher, int cipherLength);
 extern int decrypt_AES256ECB(unsigned char *key, unsigned char *cipher, int cipherLength, unsigned char *plain, int plainLength);
 extern int EncryptRsa(const char* modulusHex, const char* exponentHex, unsigned char* dataIn, unsigned int dataInLength, unsigned char* dataOut, int& dataOutLength);
+extern int EncryptRsa(const char* publicKeyPem, unsigned char* dataIn, unsigned int dataInLength, unsigned char* dataOut, int& dataOutLength);
 extern int DecryptRsa(const char* privateKeyPem, unsigned char* dataIn, unsigned int dataInLength, unsigned char* dataOut, int& dataOutLength);
 extern int SignRsa(const char* privateKeyPem, const unsigned char* message, unsigned int messageLength, unsigned char* signature, unsigned int& signatureLength);
 extern int VerifyRsa(const char* modulusHex, const char* exponentHex, const unsigned char* message, unsigned int messageLength, const unsigned char* signature, unsigned int signatureLength, bool& verified);
 extern int TestAes();
 extern int TestRsa();
+extern RSA* CreatePublicKeyFromPemString(const char* publicKeyStr);
+extern int ReadModulusAndExponent(const RSA* publicKey, unsigned char* modulus, int& modulusLength, unsigned char* exponent, int& exponentLength);
 
 int main(){
     TestAes();
@@ -38,6 +42,12 @@ int TestRsa(){
                              "NQ3B459jOp1OuA0ywvnZ6wJBAKe8vxXeC60BjCYi7iUCuAmckekHEIusIiQ6zR5f\n"
                              "UKKBD1CV7vl4cgnwi3TgEaqBSezce34Coa+8PjfSfIxYd7s=\n"
                              "-----END RSA PRIVATE KEY-----\n";
+    const char* publicRsaPem = "-----BEGIN PUBLIC KEY-----\n"
+                               "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDbCcVCB+J9bInh4t3KA43C53/p\n"
+                               "jv4SH7A3zX52gccb8XInm+ngkL9LZa5QdoNPZ7UXv913RIasyxqRDQm0rbAzEBb9\n"
+                               "VXo8YKCQnxyUKJREHStsohVyDZiElFCw9cyuwbr2yEoqnCWe5OiUm5iaQU7N1SE6\n"
+                               "aA3W+DogrtLBoWHYYwIDAQAB\n"
+                               "-----END PUBLIC KEY-----";
     int bufferLength = 8*1024;
     int outputLength = 0;
     unsigned char* bufEncrypt = new unsigned char [bufferLength];
@@ -76,6 +86,47 @@ int TestRsa(){
     ret = VerifyRsa(modulusHex, exponentHex, (const unsigned char *)plainText1, strlen(plainText1) + 1, bufEncrypt, signatureLength, verified);
     std::cout << "ret: " << ret << " Verified: " << (verified ? "true" : "false") << std::endl;
 
+
+    std::cout << std::endl << std::endl;
+    std::cout << "===== ENCRYPT FROM PEM =====" << std::endl;
+
+    outputLength = 0;
+    ret = EncryptRsa(publicRsaPem, (unsigned char *) plainText, strlen(plainText)+1,
+                     bufEncrypt, outputLength);
+
+    std::cout << "ret: " << ret << std::endl;
+    PrintBuf("bufEncrypt", bufEncrypt, outputLength, std::cout);
+    if(!ret)
+    {
+        unsigned char* outBuf = new unsigned char [bufferLength];
+        int oLength = 0;
+        ret = DecryptRsa(privateRsaPem, bufEncrypt, outputLength, outBuf, oLength);
+        std::cout << "ret: " << ret << std::endl;
+        PrintBuf("outBuf", outBuf, oLength, std::cout);
+        if(!ret){
+            if(outputLength > 0 && outBuf){
+                std::cout << "outBuf: " << (char*)outBuf << std::endl;
+            }
+        }
+        delete [] outBuf;
+    }
+
+    std::cout << "===== MODULUS & EXPONENT FROM PEM =====" << std::endl;
+    RSA *publicRsaKey = CreatePublicKeyFromPemString(publicRsaPem);
+    if(publicRsaKey){
+        int modulusLength = 0;
+        int exponentLength = 0;
+        unsigned char exponent[20] = {0};
+        unsigned char* modulus = new unsigned char [bufferLength];
+        memset(modulus, '\0', bufferLength);
+        int ret = ReadModulusAndExponent(publicRsaKey, modulus, modulusLength, exponent, exponentLength);
+        std::cout << "ret: " << ret << std::endl;
+        PrintBuf("modulus", modulus, modulusLength, std::cout);
+        PrintBuf("exponent", exponent, exponentLength, std::cout);
+
+        RSA_free(publicRsaKey);
+        delete [] modulus;
+    }
 
     delete [] bufEncrypt;
     return 0;

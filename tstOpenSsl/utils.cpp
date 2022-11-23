@@ -66,3 +66,20 @@ void UIntToHex(unsigned int x , char* hexString, int hexStrlen){
     memset(hexString, 0, hexStrlen + 1);
     sprintf(hexString, "%0*X", hexStrlen, x);
 }
+
+// C like
+// free buffer outside
+char* ReadAllFromTextFile(const char* filePath)
+{
+    char* buffer = NULL;
+    FILE* f = fopen(filePath, "r");
+    if(f) {
+        fseek(f, 0, SEEK_END);
+        size_t size = ftell(f);
+        buffer = (char*)malloc(size);
+        rewind(f);
+        fread(buffer, sizeof(char), size, f);
+        fclose(f);
+    }
+    return buffer;
+}
